@@ -1,4 +1,4 @@
-package main
+package game
 
 type Mall struct {
 	Rooms map[string]*Room

@@ -1,17 +1,17 @@
-package main
+package game
 
 import (
+	"allin/card"
 	"fmt"
-	"math/rand"
 )
 
 var CHIPS int = 1000
 
 type Game struct {
-	cards      Cards
+	fullCards  card.FullCards
 	roomPlayer []Player
 	startIndex int
-	deskCards  []Card
+	deskCards  []card.Card
 }
 
 func NewGame(start int, player []Player) *Game {
@@ -26,7 +26,7 @@ func NewGame(start int, player []Player) *Game {
 
 	// new game starter
 	game := Game{roomPlayer: player, startIndex: start}
-	game.cards.Init()
+	game.fullCards.Init()
 	return &game
 }
 
@@ -60,25 +60,36 @@ func (g *Game) gambling(round string) {
 
 func (g *Game) kickoff() {
 	// 洗牌
-	g.cards.Shuffle()
+	g.fullCards.Shuffle()
 	// 发2张手牌
 	count := len(g.roomPlayer)
 	for i := 0; i < 2; i++ {
 		start := g.startIndex
 		for j := 0; j < count; j++ {
-			g.roomPlayer[start%count].AddCard(g.cards.Next())
+			g.roomPlayer[start%count].AddCard(g.fullCards.Next())
 			start++
 		}
 	}
 	// 发5张底牌
-	g.cards.Next()
+	g.fullCards.Next()
 	for i := 0; i < 3; i++ {
-		g.deskCards = append(g.deskCards, g.cards.Next())
+		g.deskCards = append(g.deskCards, g.fullCards.Next())
 	}
-	g.cards.Next()
-	g.deskCards = append(g.deskCards, g.cards.Next())
-	g.cards.Next()
-	g.deskCards = append(g.deskCards, g.cards.Next())
+	g.fullCards.Next()
+	g.deskCards = append(g.deskCards, g.fullCards.Next())
+	g.fullCards.Next()
+	g.deskCards = append(g.deskCards, g.fullCards.Next())
+}
+
+func (g *Game) debug() {
+	fmt.Println("desk cards:", card.PrintCards(g.deskCards))
+	for _, p := range g.roomPlayer {
+		if p.Active {
+			fmt.Println(fmt.Sprintf("name:%s, type:%d, max:%s",
+				p.Name, p.MaxCard.CardsType, card.PrintCards(p.MaxCard.Cards)))
+		}
+	}
+	fmt.Println("------------------------FINISHED--------------------------------")
 }
 
 func (g *Game) Start() {
@@ -112,7 +123,7 @@ func (g *Game) Start() {
 	}
 	g.gambling("last round")
 
-	// 最后的清算
+	// 结束进行结算
 	g.close()
 }
 
@@ -120,12 +131,14 @@ func (g *Game) close() {
 	count := len(g.roomPlayer)
 	winner := g.getWinner()
 	for i := 0; i < count; i++ {
-		g.roomPlayer[winner].Win(g.roomPlayer[i].curCoins)
+		g.roomPlayer[winner].WinCoins(g.roomPlayer[i].curCoins)
 		if i != winner {
 			fmt.Println("loser:", g.roomPlayer[i].String())
 		}
 	}
 	fmt.Println("winner:", g.roomPlayer[winner].String())
+	// debug check winner info
+	g.debug()
 }
 
 func (g *Game) getActiveCount() int {
@@ -138,18 +151,28 @@ func (g *Game) getActiveCount() int {
 	return count
 }
 
-// TODO compare the cards
 func (g *Game) getWinner() int {
-	counter := rand.Int()%len(g.roomPlayer) + 1
-	count := 0
-	for {
-		for index, player := range g.roomPlayer {
-			if player.Active {
-				count++
-				if count%counter == 0 {
-					return index
-				}
+	var comparator card.Comparator
+	var winner int
+	var maxCard *card.SortedCards
+	for index, player := range g.roomPlayer {
+		if player.Active {
+			// max combination of 5 cards of the player
+			playerMaxCard := player.CalcMaxCards()
+			// update the player info
+			g.roomPlayer[index] = player
+			if maxCard == nil {
+				maxCard = playerMaxCard
+				winner = index
+				continue
+			}
+			// find max combination cards of all active players
+			if comparator.IsGreater(playerMaxCard, maxCard) > 0 {
+				maxCard = playerMaxCard
+				winner = index
 			}
 		}
 	}
+	// TODO 如果多人打平，需要平分桌上其他人的筹码
+	return winner
 }
