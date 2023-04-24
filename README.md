@@ -1,2 +1,2 @@
 # allin-game
- all in game
+ multi-player allin cards game
